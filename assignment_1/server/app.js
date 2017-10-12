@@ -7,6 +7,12 @@ var bodyParser = require('body-parser');
 //require the path nodejs module
 var path = require("path");
 
+var MongoClient = require('mongodb').MongoClient;
+var assert = require('assert');
+
+var mongodb = null;
+var messageCollection = null;
+
 //support parsing of application/json type post data
 app.use(bodyParser.json());
  
@@ -15,10 +21,14 @@ app.use(bodyParser.urlencoded({ extended: true }));
 
 app.use(express.static('public'))
 
+
+
 //tell express what to do when the /about route is requested
 app.post('/', function(req, res){
     res.setHeader('Content-Type', 'application/json');
  
+    mongodb.insertOne(req.body);
+
     res.send(JSON.stringify({
         Greeting: 'Yo Dude'
     }));
@@ -27,24 +37,25 @@ app.post('/', function(req, res){
     console.log('Received post: ' + JSON.stringify(req.body));
 });
  
-
-var MongoClient = require('mongodb').MongoClient
-  , assert = require('assert');
-
+var port = 80;
 // Connection URL
-var url = 'mongodb://54.183.4.218:27017/testdb';
-
+var url = 'mongodb://localhost:27017/hw1';
 // Use connect method to connect to the server
 MongoClient.connect(url, function(err, db) {
-  console.log("error: " + err);
-  assert.equal(null, err);
-  console.log("Connected successfully to server");
+  if (err != null) {
+  	console.log("Failed to connect to Mongo: " + err);
+  	assert(false);
+  }
 
-  db.close();
+  console.log("Connected successfully to Mongo at " + url);
+  mongodb = db;
+  messageCollection = db.collection('messages');
+
+  //wait for a connection
+  app.listen(port, function () {
+  	console.log('HTTP Server is running. Point your browser to: http://localhost:' + port);
+  });
 });
 
-//wait for a connection
-var port = 80;
-app.listen(port, function () {
-  console.log('Server is running. Point your browser to: http://localhost:' + port);
-});
+
+
