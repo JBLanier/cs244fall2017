@@ -11,7 +11,6 @@ var MongoClient = require('mongodb').MongoClient;
 var assert = require('assert');
 
 var mongodb = null;
-var messageCollection = null;
 
 //support parsing of application/json type post data
 app.use(bodyParser.json());
@@ -27,7 +26,7 @@ app.use(express.static('public'))
 app.post('/', function(req, res){
     res.setHeader('Content-Type', 'application/json');
  
-    mongodb.insertOne(req.body);
+    mongodb.collection("messages").insertOne(req.body);
 
     res.send(JSON.stringify({
         Greeting: 'Yo Dude'
@@ -49,7 +48,6 @@ MongoClient.connect(url, function(err, db) {
 
   console.log("Connected successfully to Mongo at " + url);
   mongodb = db;
-  messageCollection = db.collection('messages');
 
   //wait for a connection
   app.listen(port, function () {
