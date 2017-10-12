@@ -13,9 +13,8 @@ app.use(bodyParser.json());
 //support parsing of application/x-www-form-urlencoded post data
 app.use(bodyParser.urlencoded({ extended: true }));
 
-//tell express that www is the root of our public web folder
-app.use(express.static(path.join(__dirname, 'www')));
- 
+app.use(express.static('public'))
+
 //tell express what to do when the /about route is requested
 app.post('/', function(req, res){
     res.setHeader('Content-Type', 'application/json');
