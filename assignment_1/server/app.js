@@ -27,6 +27,22 @@ app.post('/', function(req, res){
     console.log('Received post: ' + JSON.stringify(req.body));
 });
  
+
+var MongoClient = require('mongodb').MongoClient
+  , assert = require('assert');
+
+// Connection URL
+var url = 'mongodb://54.183.4.218:27017/testdb';
+
+// Use connect method to connect to the server
+MongoClient.connect(url, function(err, db) {
+  console.log("error: " + err);
+  assert.equal(null, err);
+  console.log("Connected successfully to server");
+
+  db.close();
+});
+
 //wait for a connection
 var port = 80;
 app.listen(port, function () {
