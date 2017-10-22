@@ -20,9 +20,6 @@ app.use(bodyParser.urlencoded({ extended: true }));
 
 app.use(express.static('public'))
 
-
-
-//tell express what to do when the /about route is requested
 app.post('/', function(req, res){
     res.setHeader('Content-Type', 'application/json');
  
@@ -35,10 +32,28 @@ app.post('/', function(req, res){
     //debugging output for the terminal
     console.log('Received post: ' + JSON.stringify(req.body));
 });
+
+app.post('/samples', function(req, res){
+    mongodb.collection("samples").insertOne(req.body);
+    res.sendStatus(200);
+
+    //debugging output for the terminal
+    console.log('Received samples: ' + JSON.stringify(req.body));
+});
+
+app.get('/csv', function(req, res){
+    res.setHeader('Content-disposition', 'attachment; filename=hw2_samples.csv');
+    res.setHeader('Content-Type', 'text/csv');
+    res.status(200).send(csv);
+
+
+    //debugging output for the terminal
+    console.log('Received samples: ' + JSON.stringify(req.body));
+});
  
 var port = 80;
 // Connection URL
-var url = 'mongodb://localhost:27017/hw1';
+var url = 'mongodb://localhost:27017/hw2';
 // Use connect method to connect to the server
 MongoClient.connect(url, function(err, db) {
   if (err != null) {
@@ -54,6 +69,7 @@ MongoClient.connect(url, function(err, db) {
   	console.log('HTTP Server is running. Point your browser to: http://localhost:' + port);
   });
 });
+
 
 
 
