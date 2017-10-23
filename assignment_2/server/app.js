@@ -45,10 +45,10 @@ app.get('/csv', function(req, res){
     res.setHeader('Content-disposition', 'attachment; filename=hw2_samples.csv');
     res.setHeader('Content-Type', 'text/csv');
     res.status(200).send(csv);
+});
 
-
-    //debugging output for the terminal
-    console.log('Received samples: ' + JSON.stringify(req.body));
+app.get('/time', function(req, res){
+    res.send((new Date).getTime().toString());
 });
  
 var port = 80;

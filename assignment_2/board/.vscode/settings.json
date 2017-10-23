@@ -25,6 +25,7 @@
         "typeinfo": "cpp",
         "utility": "cpp",
         "iostream": "cpp",
-        "climits": "cpp"
+        "climits": "cpp",
+        "ctype.h": "c"
     }
 }

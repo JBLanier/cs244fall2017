@@ -5,21 +5,32 @@
 #include <ESP8266HTTPClient.h>
 #include <Wire.h>
 #include "MAX30105.h"
+#include "BigNumber.h"
+
+
+
+// const int MAX_SAMPLE_STRING_SIZE = 11; //includes a comma character at the end ("4294967295,") <- max uint32_t
+// const int MAX_TIME_STRING_SIZE = 14; //includes a comma character at the end ("1508735981516,") <- not max time but it will be this length until the year 4732AM (After Musk)
+
+// const int MAX_SAMPLES_SIZE = MAX_SAMPLE_STRING_SIZE*NUM_SAMPLES_PER_POST + 2; //+2 for '[' and ']'
+// const int MAX_TIMES_SIZE = MAX_TIME_STRING_SIZE*NUM_SAMPLES_PER_POST + 2; //+2 for '[' and ']'
+// char ir_sample_str[MAX_SAMPLES_SIZE];
+// char r_sample_str[MAX_SAMPLES_SIZE];
+// char times_str[MAX_TIMES_SIZE];
+
+// size_t ir_offset = 0;
+// size_t r_offset = 0;
+// size_t times_offset = 0;
+
 
 const int SAMPLE_RATE = 50;
-const int MAX_SAMPLE_STRING_SIZE = 11; //includes a comma character at the end
-const int MAX_TIME_STRING_SIZE = 14; //includes a comma character at the end
-const int NUM_SAMPLES_PER_POST = 50;
-const int MAX_SAMPLES_SIZE = MAX_SAMPLE_STRING_SIZE*NUM_SAMPLES_PER_POST + 2; //+2 for '[' and ']'
-const int MAX_TIMES_SIZE = MAX_TIME_STRING_SIZE*NUM_SAMPLES_PER_POST + 2; //+2 for '[' and ']'
-char ir_sample_str[MAX_SAMPLES_SIZE];
-char r_sample_str[MAX_SAMPLES_SIZE];
-char times_str[MAX_TIMES_SIZE];
-size_t ir_offset = 0;
-size_t r_offset = 0;
-size_t times_offset = 0;
+const int NUM_SAMPLES_PER_POST = 50; // Not Necessarily tied to Sample Rate
+const int MAX_SAMPLE_TRIPLET_SIZE = 50; // max size example: {"t":1508735981516,"ir":4294967295,"r":4294967295}
+const int MAX_SAMPLES_ARRAY_SIZE = ( (MAX_SAMPLE_TRIPLET_SIZE + 1) * NUM_SAMPLES_PER_POST ) + 1;
+const int MAX_JSON_STR_SIZE = MAX_SAMPLES_ARRAY_SIZE + 30;
 
-char json_str[MAX_TIMES_SIZE + MAX_SAMPLES_SIZE*2 + 45];
+char json_str[MAX_JSON_STR_SIZE];
+size_t json_offset = 0;
 
 MAX30105 particleSensor;
 
@@ -30,26 +41,28 @@ bool aWriteHasFailed = false;
 
 
 long hz_startTime; //Used to calculate Hz, reset often
-long startTime; //Reset for each connection made to server
-
 int hz_samples_taken = 0; //Used to calculate Hz, reset often
+
 int samples_taken = 0; //Reset for each POST to server
 
 long unblockedValue; //Average IR at power up
 
-void resetSampleStrings() {
-  ir_offset = 1;
-  r_offset = 1;
-  times_offset = 1;
-  ir_sample_str[0] = '[';
-  r_sample_str[0] = '[';
-  times_str[0] = '[';
+void resetJsonString() {
+  json_offset = 0;  
+  json_offset += sprintf(json_str, "{\"pwr\":\"%s\",\"samples\":[","6.4");
 }
 
+// function to display a big number and free it afterwards
+void printBignum (BigNumber & n)
+{
+  char *s = n.toString();
+  Serial.println(s);
+  free(s);
+}  // end of printBignum
+
+// Returns only when connected to Wifi
 void connectToWifi() {
-
     WiFi.begin(SSID, PASSWORD);
-
     while (WiFi.status() != WL_CONNECTED) {
         delay(500);
         Serial.print(".");
@@ -63,7 +76,8 @@ void connectToWifi() {
     } 
 }
 
-void connectToClient() {
+// Returns only when connected to the Server, connects to Wifi if Necessary
+void connectToServer() {
   while (!client.connected()) {
     if (WiFi.status() != WL_CONNECTED) {
       connectToWifi();
@@ -78,7 +92,8 @@ void connectToClient() {
   digitalWrite(LED_BUILTIN, LOW);
 }
 
-
+// Speedy, relies on using existing connection to server, can send multiple packets.
+// Doesn't even look at response, doesn't care.
 void doBetterPost(const char *path, char *json_content, size_t json_size) {
   String endpointURL = String("http://") + SERVER_HOSTNAME + path;
   
@@ -89,11 +104,9 @@ void doBetterPost(const char *path, char *json_content, size_t json_size) {
     "Connection: Keep-Alive\r\n" +
     "Content-Type: application/json\r\n" +
     "Content-Length: " + String(json_size) + "\r\n\r\n";
-  // This will send the request and headers to the server
   client.flush();
   client.print(request);
 
-  // now we need to chunk the payload into 1000 byte chunks
   size_t c_offset = 0;
   while (c_offset < json_size) {
     client.flush();
@@ -110,41 +123,66 @@ void doBetterPost(const char *path, char *json_content, size_t json_size) {
   //Serial.println(aWriteHasFailed);
 }
 
-// Returns True for success
-bool doPostToServer(const char *path, uint8_t *json_content, size_t json_size) {
+BigNumber getCurrentTime() {
+  static BigNumber timestamp_start = BigNumber(-1); //timestamp taken from server at startup
+  static long system_millis_at_server_calibration;
 
-  String url = String("http://") + SERVER_HOSTNAME + path;
-  Serial.println(String("POST to ") + url);
-  if(WiFi.status()== WL_CONNECTED){   //Check WiFi connection status
-    
-      HTTPClient http;    //Declare object of class HTTPClient
-      http.begin(url);    //Specify request destination
-      http.addHeader("Content-Type", "application/json");  //Specify content-type header
-      int httpCode = http.POST(json_content, json_size);   //Send the request
-      String payload = http.getString();                  //Get the response payload
-      Serial.println("response code: " + String(httpCode));   //Print HTTP return code
-      Serial.println("response data: " + payload + "\n\n");    //Print request response payload
-      http.end();  //Close connection
-      
-      return httpCode > 0;
-    
-    } else {
-       Serial.println("WiFi not connected, POST aborted.");   
-       return false;
+  if (timestamp_start == -1) {
+    if (WiFi.status() != WL_CONNECTED) {
+      connectToWifi();
     }
+  
+    String url = String("http://") + SERVER_HOSTNAME + "/time";
+    Serial.println(String("POST to ") + url);
+    if(WiFi.status()== WL_CONNECTED){   //Check WiFi connection status
+      
+        HTTPClient http;    //Declare object of class HTTPClient
+        http.begin(url);    //Specify request destination
+        long request_start = millis();
+        int httpCode = http.GET(); //Send the request
+        String payload = http.getString();                  //Get the response payload
+        Serial.println("response code: " + String(httpCode));   //Print HTTP return code
+        Serial.println("response data: " + payload + "\n\n");    //Print request response payload
+        http.end();  //Close connection
+        
+        if (httpCode != 200) {
+          Serial.print("HTTP Code for getting time: ");
+          Serial.println(httpCode);
+          return BigNumber(-1);
+        }
+  
+        system_millis_at_server_calibration = millis();
+         // factor in latency for timestamp to be sent back over internet to the board.
+        timestamp_start = BigNumber(payload.c_str()) + BigNumber((system_millis_at_server_calibration - request_start)/2);
+
+      } else {
+         Serial.println("WiFi not connected, POST aborted.");   
+         return BigNumber(-1);
+      }
+  }
+
+  return BigNumber(timestamp_start + BigNumber(millis() - system_millis_at_server_calibration));
 }
 
 void setup() {
 
+  // We use bignumber to handle full-size timestamps
+  Serial.println("Program started");
+  BigNumber::begin(0); //set constructor with max number of decimal digits we care about
+  Serial.println("gfd");
+
   // initialize LED digital pin as an output.
   pinMode(LED_BUILTIN, OUTPUT);
+  // Baud rate
   Serial.begin(115200);
   Serial.println("Program started");
-  connectToClient();
+  
+  // We'll use this connection later to doBetterPost() with the header, "connection: Keep-Alive"
+  connectToWifi();
 
+  // Print some fun internet stats
   Serial.println("");
   Serial.println("WiFi connected");
-  // Print the IP address
   Serial.println(WiFi.localIP());
   byte mac[6];
   WiFi.macAddress(mac);
@@ -156,31 +194,29 @@ void setup() {
   Serial.print(MAC_char);
   Serial.println("\n");
 
+  // Say hi to the MAX30105 Particle Sensor
   if (!particleSensor.begin(Wire, I2C_SPEED_FAST)) //Use default I2C port, 400kHz speed
   {
     Serial.println("MAX30105 was not found. Please check wiring/power. ");
     while (1);
   }
 
-  //Setup to sense up to 18 inches, max LED brightness
+  //Set up the MAX30105
   byte powerLevel = 0x1F; //Options: 0=Off to 255=50mA 
   //powerLevel = 0x02, 0.4mA - Presence detection of ~4 inch
   //powerLevel = 0x1F, 6.4mA - Presence detection of ~8 inch
   //powerLevel = 0x7F, 25.4mA - Presence detection of ~8 inch
   //powerLevel = 0xFF, 50.0mA - Presence detection of ~12 inch
-
   byte sampleAverage = 4; //Options: 1, 2, 4, 8, 16, 32
   byte ledMode = 2; //Options: 1 = Red only, 2 = Red + IR, 3 = Red + IR + Green
   int sampleRate = 1000; //Options: 50, 100, 200, 400, 800, 1000, 1600, 3200
   int pulseWidth = 411; //Options: 69, 118, 215, 411
   int adcRange = 2048; //Options: 2048, 4096, 8192, 16384
-
   particleSensor.setup(powerLevel, sampleAverage, ledMode, sampleRate, pulseWidth, adcRange); //Configure sensor with these settings
-
   particleSensor.setPulseAmplitudeRed(0); //Turn off Red LED
   particleSensor.setPulseAmplitudeGreen(0); //Turn off Green LED
 
-  //Take an average of IR readings at power up
+  //Take an average of IR readings at power up to calibrate
   unblockedValue = 0;
   for (byte x = 0 ; x < 32 ; x++)
   {
@@ -188,19 +224,24 @@ void setup() {
   }
   unblockedValue /= 32;
 
-  resetSampleStrings();
+  resetJsonString();
+  
+  while (getCurrentTime() == -1) {
+    Serial.println("Failed to calibrate time with server.");
+    delay(5000);
+  }
+  connectToServer();
 
   // Do time sensitive operations last
-  startTime = millis();
-  Serial.println(startTime);
-  hz_startTime = startTime;
+  hz_startTime = millis();
   particleSensor.check(); // read in the first (up to 3) samples
 }
 
 void loop() {
 
   if(!client.connected()) {
-    connectToClient();
+    Serial.println("Waiting to connect to server.")
+    connectToServer();
   }
 
   long frame_start = millis();
@@ -210,24 +251,31 @@ void loop() {
   int ir = particleSensor.getFIFOIR();
   int r = particleSensor.getFIFORed();
 
-  char *ir_sample_str_at_offset = &ir_sample_str[ir_offset];
-  char *r_sample_str_at_offset = &r_sample_str[r_offset];
-  char *times_str_at_offset = &times_str[times_offset];
-  ir_offset += sprintf(ir_sample_str_at_offset, "%ld,", ir);
-  r_offset += sprintf(r_sample_str_at_offset, "%ld,", r);
-  times_offset += sprintf(times_str_at_offset, "%ld,", frame_start);
-  // ir_offset += sprintf(ir_sample_str_at_offset, "4294967295,"); //testing with max values
-  // r_offset += sprintf(r_sample_str_at_offset, "4294967295,");
-  // times_offset += sprintf(times_str_at_offset, "1508735981516,");
   
-  // Serial.print("R[");
-  // Serial.print(r);
-  // Serial.print("] IR[");
-  // Serial.print(ir);
-  // Serial.print("] Hz[");
-  // Serial.print((float)hz_samples_taken / ((millis() - hz_startTime) / 1000.0), 2);
-  // Serial.print("]");
-  // Serial.println();
+  char *json_str_at_offset = &json_str[json_offset];
+  char *time_str = getCurrentTime().toString();
+  json_offset += sprintf(json_str_at_offset, "{\"t\":%s,", time_str);
+  free(time_str);
+  json_str_at_offset = &json_str[json_offset];  
+  json_offset += sprintf(json_str_at_offset, "\"ir\":%ld,", ir);
+  json_str_at_offset = &json_str[json_offset];  
+  json_offset += sprintf(json_str_at_offset, "\"r\":%ld},", r);
+
+  // json_offset += sprintf(json_str_at_offset, "{\"t\":%s,", "1508735981516");
+  // json_str_at_offset = &json_str[json_offset];  
+  // json_offset += sprintf(json_str_at_offset, "\"ir\":%ld,", 1294967295);
+  // json_str_at_offset = &json_str[json_offset];
+  // json_offset += sprintf(json_str_at_offset, "\"r\"%ld},", 1294967295);
+  
+  //Real time readings
+  Serial.print("R[");
+  Serial.print(r);
+  Serial.print("] IR[");
+  Serial.print(ir);
+  Serial.print("] Hz[");
+  Serial.print((float)hz_samples_taken / ((millis() - hz_startTime) / 1000.0), 2);
+  Serial.print("]");
+  Serial.println();
 
   particleSensor.nextSample(); //We're finished with this sample so move to next sample
   if (!particleSensor.available()) { //are we out of new data?
@@ -242,40 +290,43 @@ void loop() {
 
   if (samples_taken >= NUM_SAMPLES_PER_POST) {
 
-    ir_sample_str[ir_offset - 1] = ']';
-    r_sample_str[r_offset - 1] = ']';
-    times_str[times_offset - 1] = ']';
-    ir_sample_str[ir_offset] = '\0';
-    r_sample_str[r_offset] = '\0';
-    times_str[times_offset] = '\0';
+    json_str[json_offset-1] = ']';
+    json_str_at_offset = &json_str[json_offset];
+    json_offset += sprintf(json_str_at_offset, "}\0");
+
+    // ir_sample_str[ir_offset - 1] = ']';
+    // r_sample_str[r_offset - 1] = ']';
+    // times_str[times_offset - 1] = ']';
+    // ir_sample_str[ir_offset] = '\0';
+    // r_sample_str[r_offset] = '\0';
+    // times_str[times_offset] = '\0';
     
-    size_t json_offset = 0;
-    char *json_at_offset = &json_str[json_offset];
-    json_offset += sprintf(json_at_offset, "{\"data\":{\"times\":%s,\"ir\":",times_str);
-    json_at_offset = &json_str[json_offset];
-    json_offset += sprintf(json_at_offset, "%s,\"r\":",ir_sample_str);
-    json_at_offset = &json_str[json_offset];
-    json_offset += sprintf(json_at_offset, "%s}}",r_sample_str);
+    // size_t json_offset = 0;
+    // char *json_at_offset = &json_str[json_offset];
+    // json_offset += sprintf(json_at_offset, "{\"data\":{\"times\":%s,\"ir\":",times_str);
+    // json_at_offset = &json_str[json_offset];
+    // json_offset += sprintf(json_at_offset, "%s,\"r\":",ir_sample_str);
+    // json_at_offset = &json_str[json_offset];
+    // json_offset += sprintf(json_at_offset, "%s}}",r_sample_str);
 
     // Serial.write(json_str,json_offset);
+    // Serial.println("");
     doBetterPost("/",json_str, json_offset);
-    resetSampleStrings();
+    resetJsonString();
     samples_taken = 0;
-    startTime = millis();
   }
 
   //Ensure a max rate of 50Hz
   long frame_duration = millis() - frame_start;
   long wait_time = 20 - frame_duration;
-
-  if (samples_taken == 0) {
-    Serial.println(frame_duration);    
-  }
-
   if (wait_time > 0) {
     delay(wait_time);
   }
   
+  // //Print frame duration if we POSTed
+  // if (samples_taken == 0) {
+  //   Serial.println(frame_duration);    
+  // }
   
 }
 
