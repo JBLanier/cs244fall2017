@@ -65,9 +65,15 @@ MongoClient.connect(url, function(err, db) {
   mongodb = db;
 
   //wait for a connection
-  app.listen(port, function () {
+  var server = app.listen(port, function () {
   	console.log('HTTP Server is running. Point your browser to: http://localhost:' + port);
   });
+
+    server.on('connection', function(socket) {
+        console.log("A new connection was made by a client.");
+        socket.setTimeout(30 * 1000);
+        // 30 second timeout. Change this as you see fit.
+    })
 });
 
 
