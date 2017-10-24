@@ -3,6 +3,7 @@
     "body-parser": "^1.15.2",
     "csv": "^2.0.0",
     "express": "4.14.0",
+    "json2csv": "^3.11.5",
     "mongodb": "^2.2.33"
   },
   "scripts": {

@@ -7,22 +7,6 @@
 #include "MAX30105.h"
 #include "BigNumber.h"
 
-
-
-// const int MAX_SAMPLE_STRING_SIZE = 11; //includes a comma character at the end ("4294967295,") <- max uint32_t
-// const int MAX_TIME_STRING_SIZE = 14; //includes a comma character at the end ("1508735981516,") <- not max time but it will be this length until the year 4732AM (After Musk)
-
-// const int MAX_SAMPLES_SIZE = MAX_SAMPLE_STRING_SIZE*NUM_SAMPLES_PER_POST + 2; //+2 for '[' and ']'
-// const int MAX_TIMES_SIZE = MAX_TIME_STRING_SIZE*NUM_SAMPLES_PER_POST + 2; //+2 for '[' and ']'
-// char ir_sample_str[MAX_SAMPLES_SIZE];
-// char r_sample_str[MAX_SAMPLES_SIZE];
-// char times_str[MAX_TIMES_SIZE];
-
-// size_t ir_offset = 0;
-// size_t r_offset = 0;
-// size_t times_offset = 0;
-
-
 const int SAMPLE_RATE = 50;
 const int NUM_SAMPLES_PER_POST = 50; // Not Necessarily tied to Sample Rate
 const int MAX_SAMPLE_TRIPLET_SIZE = 50; // max size example: {"t":1508735981516,"ir":4294967295,"r":4294967295}
@@ -33,6 +17,12 @@ char json_str[MAX_JSON_STR_SIZE];
 size_t json_offset = 0;
 
 MAX30105 particleSensor;
+byte powerLevel = 0x02;
+//Options: 0=Off to 255=50mA 
+//powerLevel = 0x02, 0.4mA - Presence detection of ~4 inch
+//powerLevel = 0x1F, 6.4mA - Presence detection of ~8 inch
+//powerLevel = 0x7F, 25.4mA - Presence detection of ~8 inch
+//powerLevel = 0xFF, 50.0mA - Presence detection of ~12 inch
 
 String deviceName = "CS244";
 const int HTTP_PORT = 80;
@@ -48,8 +38,16 @@ int samples_taken = 0; //Reset for each POST to server
 long unblockedValue; //Average IR at power up
 
 void resetJsonString() {
-  json_offset = 0;  
-  json_offset += sprintf(json_str, "{\"pwr\":\"%s\",\"samples\":[","6.4");
+  json_offset = 0;
+  char *pwr;
+  switch (powerLevel) {
+    case 0x02: pwr = "0.4"; break;
+    case 0x1F: pwr = "6.4"; break;
+    case 0x7F: pwr = "25.4"; break;
+    case 0xFF: pwr = "50.0"; break;
+    default: pwr = "unkown"; break;
+  }
+  json_offset += sprintf(json_str, "{\"pwr\":\"%s\",\"samples\":[",pwr);
 }
 
 // function to display a big number and free it afterwards
@@ -201,12 +199,6 @@ void setup() {
     while (1);
   }
 
-  //Set up the MAX30105
-  byte powerLevel = 0x1F; //Options: 0=Off to 255=50mA 
-  //powerLevel = 0x02, 0.4mA - Presence detection of ~4 inch
-  //powerLevel = 0x1F, 6.4mA - Presence detection of ~8 inch
-  //powerLevel = 0x7F, 25.4mA - Presence detection of ~8 inch
-  //powerLevel = 0xFF, 50.0mA - Presence detection of ~12 inch
   byte sampleAverage = 4; //Options: 1, 2, 4, 8, 16, 32
   byte ledMode = 2; //Options: 1 = Red only, 2 = Red + IR, 3 = Red + IR + Green
   int sampleRate = 1000; //Options: 50, 100, 200, 400, 800, 1000, 1600, 3200
@@ -240,7 +232,7 @@ void setup() {
 void loop() {
 
   if(!client.connected()) {
-    Serial.println("Waiting to connect to server.")
+    Serial.println("Waiting to connect to server");
     connectToServer();
   }
 
@@ -248,18 +240,16 @@ void loop() {
   samples_taken++;
   hz_samples_taken++;
 
-  int ir = particleSensor.getFIFOIR();
-  int r = particleSensor.getFIFORed();
-
+  char *ir = BigNumber(particleSensor.getFIFOIR()).toString();
+  char *r = BigNumber(particleSensor.getFIFORed()).toString();
+  char *time_str = getCurrentTime().toString();
   
   char *json_str_at_offset = &json_str[json_offset];
-  char *time_str = getCurrentTime().toString();
   json_offset += sprintf(json_str_at_offset, "{\"t\":%s,", time_str);
-  free(time_str);
   json_str_at_offset = &json_str[json_offset];  
-  json_offset += sprintf(json_str_at_offset, "\"ir\":%ld,", ir);
+  json_offset += sprintf(json_str_at_offset, "\"ir\":%s,", ir);
   json_str_at_offset = &json_str[json_offset];  
-  json_offset += sprintf(json_str_at_offset, "\"r\":%ld},", r);
+  json_offset += sprintf(json_str_at_offset, "\"r\":%s},", r);
 
   // json_offset += sprintf(json_str_at_offset, "{\"t\":%s,", "1508735981516");
   // json_str_at_offset = &json_str[json_offset];  
@@ -276,6 +266,11 @@ void loop() {
   Serial.print((float)hz_samples_taken / ((millis() - hz_startTime) / 1000.0), 2);
   Serial.print("]");
   Serial.println();
+
+  free(time_str);
+  free(ir);
+  free(r);
+  
 
   particleSensor.nextSample(); //We're finished with this sample so move to next sample
   if (!particleSensor.available()) { //are we out of new data?
@@ -311,7 +306,7 @@ void loop() {
 
     // Serial.write(json_str,json_offset);
     // Serial.println("");
-    doBetterPost("/",json_str, json_offset);
+    doBetterPost("/samples",json_str, json_offset);
     resetJsonString();
     samples_taken = 0;
   }
