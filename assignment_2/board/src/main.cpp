@@ -17,7 +17,7 @@ char json_str[MAX_JSON_STR_SIZE];
 size_t json_offset = 0;
 
 MAX30105 particleSensor;
-byte powerLevel = 0xFF;
+byte powerLevel = 0x1F;
 //Options: 0=Off to 255=50mA 
 //powerLevel = 0x02, 0.4mA - Presence detection of ~4 inch
 //powerLevel = 0x1F, 6.4mA - Presence detection of ~8 inch
