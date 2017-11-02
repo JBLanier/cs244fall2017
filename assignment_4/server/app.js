@@ -84,6 +84,30 @@ app.post('/samples', function(req, res){
     res.sendStatus(200);
 });
 
+app.post('/ppg_accel_samples', function(req, res){
+    var collection = mongodb.collection("samples2");
+    collection.findOne({"pwr":req.body.pwr}, function(err, result) {
+        if (err) throw err;
+        if (result) {
+            console.log("Received " + req.body.samples.length +" samples for " + req.body.pwr + " " + getDateTime());
+            collection.update(
+                { "_id": result._id},
+                {
+                    "$push": {
+                        "samples": {
+                            "$each": req.body.samples
+                        }
+                    }
+                }
+            )
+        } else {
+            console.log("Received " + req.body.samples.length +" samples for " + req.body.pwr + " (NEW) " + getDateTime());
+            collection.insertOne(req.body);
+        }
+    });
+    res.sendStatus(200);
+});
+
 app.get('/hw2csv', function(req, res){
     var collection = mongodb.collection("samples");
     var number_of_samples = 6000;
@@ -117,6 +141,31 @@ app.get('/hw2csv', function(req, res){
                 });
             });
         });
+    });
+
+});
+
+app.get('/hw4csv', function(req, res){
+    var collection = mongodb.collection("samples2");
+    var number_of_samples = 250;
+    collection.findOne({pwr:"6.4"}, { samples: { $slice: (number_of_samples*-1) } }, function(err, result) {
+
+        var columns = [];
+        for(var i=0; i<result.samples.length; i++){
+            columns.push({
+                X:result.samples[i].x,
+                Y:result.samples[i].y,
+                Z:result.samples[i].z
+            });
+        }
+
+        // console.log(combined_columns);
+        var fields = ['X','Y','Z'];
+        var csv = json2csv({ data: columns, fields: fields });
+        res.setHeader('Content-disposition', 'attachment; filename=team8_assignment4.csv');
+        res.set('Content-Type', 'text/csv');
+        res.status(200).send(csv);
+
     });
 
 });

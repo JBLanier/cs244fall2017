@@ -6,7 +6,7 @@
             "request": "launch",
             "cwd": "${workspaceRoot}",
             "name": "PlatformIO Debugger",
-            "target": "/Users/JB/Desktop/cs244fall2017/assignment_3/board/.pioenvs/thingdev/firmware.elf",
+            "target": "/Users/JB/Desktop/cs244fall2017/assignment_4/board/.pioenvs/thingdev/firmware.elf",
             "gdbpath": "/Users/JB/.platformio/penv/bin/piodebuggdb",
             "autorun": [ "source .pioinit" ]
         }
