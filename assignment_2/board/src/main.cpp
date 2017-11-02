@@ -205,8 +205,6 @@ void setup() {
   int pulseWidth = 411; //Options: 69, 118, 215, 411
   int adcRange = 2048; //Options: 2048, 4096, 8192, 16384
   particleSensor.setup(powerLevel, sampleAverage, ledMode, sampleRate, pulseWidth, adcRange); //Configure sensor with these settings
-  particleSensor.setPulseAmplitudeRed(0); //Turn off Red LED
-  particleSensor.setPulseAmplitudeGreen(0); //Turn off Green LED
 
   //Take an average of IR readings at power up to calibrate
   unblockedValue = 0;
