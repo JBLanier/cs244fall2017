@@ -176,7 +176,7 @@ app.get('/time', function(req, res){
 
 app.get('/hw6raw_csv', function(req, res){
     var collection = mongodb.collection("samples2");
-    var number_of_samples = 250; //50*60*10
+    var number_of_samples = 30000; //50*60*10
     collection.findOne({pwr:"6.4"}, { samples: { $slice: (number_of_samples*-1) } }, function(err, result) {
 
         var columns = [];
