@@ -191,7 +191,7 @@ app.get('/hw6raw_csv', function(req, res){
         }
 
         // console.log(combined_columns);
-        var fields = ['IR','R','X','Y','Z'];
+        var fields = ['IR','RED','X','Y','Z'];
         var csv = json2csv({ data: columns, fields: fields });
         res.setHeader('Content-disposition', 'attachment; filename=hw6_raw_data.csv');
         res.set('Content-Type', 'text/csv');
