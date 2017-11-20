@@ -191,9 +191,9 @@ app.get('/hw6raw_csv', function(req, res){
         }
 
         // console.log(combined_columns);
-        var fields = ['X','Y','Z'];
+        var fields = ['IR','R','X','Y','Z'];
         var csv = json2csv({ data: columns, fields: fields });
-        res.setHeader('Content-disposition', 'attachment; filename=team8_assignment4.csv');
+        res.setHeader('Content-disposition', 'attachment; filename=hw6_raw_data.csv');
         res.set('Content-Type', 'text/csv');
         res.status(200).send(csv);
 
