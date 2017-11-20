@@ -182,6 +182,7 @@ app.get('/hw6raw_csv', function(req, res){
         var columns = [];
         for(var i=0; i<result.samples.length; i++){
             columns.push({
+                TIME:result.samples[i].t,
                 IR:result.samples[i].ir,
                 RED:result.samples[i].r,
                 X:result.samples[i].x,
@@ -191,7 +192,7 @@ app.get('/hw6raw_csv', function(req, res){
         }
 
         // console.log(combined_columns);
-        var fields = ['IR','RED','X','Y','Z'];
+        var fields = ['TIME','IR','RED','X','Y','Z'];
         var csv = json2csv({ data: columns, fields: fields });
         res.setHeader('Content-disposition', 'attachment; filename=hw6_raw_data.csv');
         res.set('Content-Type', 'text/csv');
